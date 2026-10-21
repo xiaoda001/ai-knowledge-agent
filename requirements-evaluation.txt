@@ -1,0 +1,6 @@
+# Optional dependencies for the offline RAG quality evaluation only.
+ragas==0.4.1
+openai>=1.0
+python-dotenv>=1.0,<2
+# Ragas 0.4.1 imports ChatVertexAI from the legacy community package path.
+langchain-community==0.3.31

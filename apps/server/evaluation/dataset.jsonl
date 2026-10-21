@@ -1,0 +1,6 @@
+{"id":"hr-annual-leave","question":"年假需要提前几天申请？","reference":"员工申请年假应至少提前三个工作日提交申请，经直属主管批准后生效。"}
+{"id":"hr-missed-checkin","question":"设备故障漏签后，应在多久内申请补签？","reference":"员工应在当日向直属主管说明，并在两个工作日内提交补签申请。"}
+{"id":"hr-sick-leave-proof","question":"连续病假超过几个工作日需要补充证明？","reference":"连续病假超过两个工作日时，需补充医疗机构出具的证明。"}
+{"id":"commerce-return-window","question":"买家签收后多久可以申请退货？","reference":"买家签收商品后七个自然日内，在商品完好且配件齐全的情况下可以申请退货。"}
+{"id":"commerce-quality-issue","question":"商品有质量问题时，商家需要在几个工作日内给出方案？","reference":"商家应在两个工作日内给出补发、维修或退款方案。"}
+{"id":"commerce-return-shipping","question":"因个人原因退货，运费通常由谁承担？","reference":"买家因个人原因退货时，退货运费通常由买家承担；订单页面明确标注包邮退货的除外。"}
