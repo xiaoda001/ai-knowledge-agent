@@ -45,7 +45,7 @@ services:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
       chroma: { condition: service_started }
-    ports: ["8000:8000"]
+    ports: ["8022:8000"]
 
   worker:
     build: .
@@ -118,8 +118,8 @@ services:
     build:
       context: ./apps/web
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-    ports: ["5173:80"]
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8022}
+    ports: ["8020:80"]
     depends_on: [api]
 
 volumes:

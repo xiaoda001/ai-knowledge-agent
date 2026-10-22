@@ -22,7 +22,7 @@ Ragas 只属于离线评测环境，不安装到 API/Worker 的生产依赖中�
 
 ```powershell
 $env:RAGAS_API_TOKEN = "<authorized bearer token>"
-$env:RAGAS_EVAL_BASE_URL = "http://localhost:8000/v1"
+$env:RAGAS_EVAL_BASE_URL = "http://localhost:8022/v1"
 $env:RAGAS_EVAL_API_KEY = "<evaluation provider key>"
 $env:RAGAS_EVAL_MODEL = "<judge model>"
 $env:RAGAS_EVAL_EMBEDDING_MODEL = "<embedding model>"

@@ -211,7 +211,7 @@ async def run(args: argparse.Namespace) -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api-url", default="http://localhost:8000", help="Base URL of the running API")
+    parser.add_argument("--api-url", default="http://localhost:8022", help="Base URL of the running API")
     parser.add_argument("--token", help="Bearer token; prefer RAGAS_API_TOKEN environment variable")
     parser.add_argument("--knowledge-base-id", action="append", default=[], help="Authorized KB ID (repeat for multi-KB)")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)

@@ -50,7 +50,7 @@ class Settings:
     reranker_api_key = os.getenv("RERANKER_API_KEY", "")
     jwt_secret = os.getenv("JWT_SECRET", "")
     jwt_minutes = int(os.getenv("JWT_MINUTES", "1440"))
-    cors_origins = tuple(origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip())
+    cors_origins = tuple(origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:8020").split(",") if origin.strip())
     upload_dir = os.getenv("UPLOAD_DIR", "/data/uploads")
     llm_mode = _boolean_setting("LLM_MODE")
     llm_base_url = os.getenv("LLM_BASE_URL", "")

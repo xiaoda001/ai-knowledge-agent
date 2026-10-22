@@ -9,7 +9,7 @@
 1. 复制 `.env.example` 为 `.env`，设置 MySQL 密码和至少 32 字节的随机 `JWT_SECRET`。JWT 默认有效期为 1440 分钟（24 小时），可通过 `JWT_MINUTES` 配置。本地 Python 进程会自动读取项目根目录 `.env`；Compose 会把 `.env` 注入 API 和 Worker。远程部署时同时将 `VITE_API_URL` 设置为浏览器可访问的 API 地址，并在 `CORS_ORIGINS` 中填写精确的 Web 来源；重新构建 Web 镜像使 API 地址生效。
 2. 运行 `docker compose up --build`。
 3. 一次性创建管理员：`docker compose exec api python -m app.cli`。
-4. API 文档位于 `http://localhost:8000/docs`，Web 位于 `http://localhost:5173`。
+4. API 文档位于 `http://localhost:8022/docs`，Web 位于 `http://localhost:8020`。
 
 管理员登录 Web 后可建库、创建成员并加入当前知识库；登录用户可查看授权范围内的文档，管理员可查看所加入知识库的处理状态。API 文档位于 `/docs`，仍可用于脚本化管理。文档上传当前限管理员，且 ACL 不能超出上传者自己的部门、密级和角色范围。
 
