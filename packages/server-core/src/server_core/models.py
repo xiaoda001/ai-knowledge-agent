@@ -15,10 +15,11 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     username: Mapped[str] = mapped_column(String(190), unique=True, index=True)
+    nickname: Mapped[str] = mapped_column(String(128), default="")
     password_hash: Mapped[str] = mapped_column(String(256))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    department_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    department_id: Mapped[str | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
     roles: Mapped[list[str]] = mapped_column(JSON, default=list)
     clearance: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -29,6 +30,12 @@ class Role(Base):
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     description: Mapped[str] = mapped_column(String(500), default="")
     permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+class Department(Base):
+    __tablename__ = "departments"
+    id: Mapped[str] = mapped_column(String(128), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
 
 
 class UserRole(Base):
@@ -77,7 +84,7 @@ class Document(Base):
     storage_path: Mapped[str] = mapped_column(String(1024))
     status: Mapped[str] = mapped_column(String(32), default="queued", index=True)
     access_scope: Mapped[str] = mapped_column(String(32), default="document_acl")
-    department_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    department_id: Mapped[str | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
     classification_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
     allowed_roles: Mapped[list[str]] = mapped_column(JSON, default=list)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

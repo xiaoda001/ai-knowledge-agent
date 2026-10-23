@@ -1,7 +1,9 @@
+import json
 import re
 from functools import lru_cache
 
 import chromadb
+from opentelemetry import trace
 from rank_bm25 import BM25Okapi
 from sqlalchemy import select
 
@@ -10,6 +12,9 @@ from server_core.config import settings
 from server_core.embeddings import embed_texts
 from server_core.model_api import post_model_json
 from server_core.models import Chunk
+
+
+_tracer = trace.get_tracer(__name__)
 
 
 def terms(text: str) -> list[str]:
@@ -34,18 +39,47 @@ class RemoteReranker:
         queries = {query for query, _document in pairs}
         if len(queries) != 1:
             raise ValueError("Remote reranker expects one query per batch")
-        response = post_model_json(
-            settings.reranker_base_url,
-            "/rerank",
-            settings.reranker_api_key,
-            {
-                "model": settings.reranker_model,
-                "query": pairs[0][0],
-                "documents": [document for _query, document in pairs],
-                "top_n": len(pairs),
-                "return_documents": False,
-            },
-        )
+        with _tracer.start_as_current_span("knowledge.rerank.request") as span:
+            span.set_attribute("langfuse.observation.model.name", settings.reranker_model)
+            span.set_attribute("rerank.document_count", len(pairs))
+            response = post_model_json(
+                settings.reranker_base_url,
+                "/rerank",
+                settings.reranker_api_key,
+                {
+                    "model": settings.reranker_model,
+                    "query": pairs[0][0],
+                    "documents": [document for _query, document in pairs],
+                    "top_n": len(pairs),
+                    "return_documents": False,
+                },
+            )
+            meta = response.get("meta") or {}
+            billed_units = meta.get("billed_units") or {}
+            usage = meta.get("tokens") or response.get("usage") or {}
+            if isinstance(billed_units, dict):
+                span.set_attribute("rerank.billed_units", json.dumps(billed_units))
+            input_tokens = (billed_units.get("input_tokens") if isinstance(billed_units, dict) else None)
+            if not isinstance(input_tokens, (int, float)):
+                input_tokens = usage.get("input_tokens", usage.get("prompt_tokens")) if isinstance(usage, dict) else None
+            output_tokens = (billed_units.get("output_tokens") if isinstance(billed_units, dict) else None)
+            if not isinstance(output_tokens, (int, float)):
+                output_tokens = usage.get("output_tokens", usage.get("completion_tokens")) if isinstance(usage, dict) else None
+            if isinstance(input_tokens, (int, float)):
+                span.set_attribute("rerank.input_tokens", int(input_tokens))
+                span.set_attribute("rerank.usage_reported", True)
+                usage_details = {"input": int(input_tokens)}
+                if isinstance(output_tokens, (int, float)):
+                    usage_details["output"] = int(output_tokens)
+                span.set_attribute("langfuse.observation.usage_details", json.dumps(usage_details))
+                price = settings.reranker_price_per_1m
+                if price is not None:
+                    cost = int(input_tokens) * price / 1_000_000
+                    span.set_attribute("langfuse.observation.cost_details", json.dumps({
+                        "input": cost, "total": cost, "currency": "USD",
+                    }))
+            else:
+                span.set_attribute("rerank.usage_reported", False)
         results = response.get("results")
         if not isinstance(results, list):
             raise RuntimeError("Reranker API returned an unexpected response")

@@ -4,10 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
-from app.api.routes import admin, auth, chat, documents, files, knowledge_bases, roles
+from app.api.routes import admin, auth, chat, departments, documents, files, knowledge_bases, roles
 from app.services.legacy_roles import ensure_legacy_read_only_role
 from server_core.config import settings
 from server_core.db import Base, engine
+from server_core.departments import ensure_department_schema
 from server_core.observability import configure_observability
 from worker_app.celery_app import celery_app as worker_celery_app
 from server_core import models as _models  # noqa: F401
@@ -20,11 +21,13 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["X-Trace-ID", "X-Session-ID"],
 )
 
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(roles.router)
+app.include_router(departments.router)
 app.include_router(knowledge_bases.router)
 app.include_router(documents.router)
 app.include_router(files.router)
@@ -42,6 +45,11 @@ def ensure_chat_message_usage_column(database_engine=engine):
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
+    user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
+    if "nickname" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN nickname VARCHAR(128) NOT NULL DEFAULT ''"))
+    ensure_department_schema(engine)
     document_columns = {column["name"] for column in inspect(engine).get_columns("documents")}
     if "access_scope" not in document_columns:
         with engine.begin() as connection:

@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
 
 
 class UserCreate(BaseModel):
+    nickname: str = Field(default="", max_length=128)
     username: str
     password: str
     department_id: str
@@ -36,8 +37,30 @@ class UserCreate(BaseModel):
     role_ids: list[str] = Field(min_length=1, max_length=64)
 
 
+class UserUpdate(BaseModel):
+    nickname: str = Field(min_length=1, max_length=128)
+    username: str = Field(min_length=1, max_length=190)
+    password: str = Field(default="", max_length=256)
+    department_id: str = Field(min_length=1, max_length=128)
+    clearance: int = Field(ge=0)
+    role_ids: list[str] = Field(min_length=1, max_length=64)
+
+
 class UserRolesUpdate(BaseModel):
     role_ids: list[str] = Field(min_length=1, max_length=64)
+
+
+class UserDepartmentUpdate(BaseModel):
+    department_id: str = Field(min_length=1, max_length=128)
+    clearance: int = Field(ge=0)
+
+
+class DepartmentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class DepartmentUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
 
 
 class KnowledgeBaseUpdate(BaseModel):

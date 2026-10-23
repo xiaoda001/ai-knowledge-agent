@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import json
 import os
 import re
+import secrets
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +44,8 @@ def load_cases(path: Path) -> list[dict]:
 
 
 def query_chat_api(api_url: str, token: str, knowledge_base_ids: list[str], case: dict) -> dict:
+    trace_id = secrets.token_hex(16)
+    parent_span_id = secrets.token_hex(8)
     payload = json.dumps({
         "question": case["question"],
         "knowledge_base_ids": knowledge_base_ids,
@@ -53,16 +57,27 @@ def query_chat_api(api_url: str, token: str, knowledge_base_ids: list[str], case
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
+            # W3C Trace Context lets chat.request inherit this ID so scores can
+            # be attached to the exact API execution in Langfuse.
+            "traceparent": f"00-{trace_id}-{parent_span_id}-01",
         },
         method="POST",
     )
     try:
         with urlopen(request, timeout=300) as response:
+            response_trace_id = response.headers.get("X-Trace-ID")
+            response_session_id = response.headers.get("X-Session-ID")
             body = response.read().decode("utf-8")
     except HTTPError as exc:
         raise RuntimeError(f"Chat API returned HTTP {exc.code} for case {case['id']}") from None
     except (URLError, TimeoutError) as exc:
         raise RuntimeError(f"Chat API request failed ({type(exc).__name__}) for case {case['id']}") from None
+    if response_trace_id and response_trace_id.lower() != trace_id:
+        raise RuntimeError(f"Chat API trace ID mismatch for case {case['id']}")
+    if os.environ.get("LANGFUSE_ENABLED", "false").strip().lower() == "true" and not response_trace_id:
+        raise RuntimeError(
+            f"Chat API did not return X-Trace-ID for case {case['id']}; check OTEL_ENABLED and request tracing"
+        )
 
     answer_parts = []
     sources = []
@@ -95,6 +110,8 @@ def query_chat_api(api_url: str, token: str, knowledge_base_ids: list[str], case
     return {
         "response": answer,
         "retrieved_contexts": contexts,
+        "trace_id": trace_id,
+        "session_id": response_session_id,
         "citation_present": bool(citation_numbers),
         "citation_indices_valid": all(1 <= number <= len(sources) for number in citation_numbers),
     }
@@ -162,10 +179,55 @@ async def score_case(case: dict, output: dict, metrics: dict) -> dict:
         values[name] = float(score.value)
     return {
         "id": case["id"],
+        "trace_id": output["trace_id"],
+        "session_id": output["session_id"],
         **values,
         "citation_present": output["citation_present"],
         "citation_indices_valid": output["citation_indices_valid"],
     }
+
+
+def upload_langfuse_scores(records: list[dict], run_id: str) -> int:
+    """Attach offline Ragas scores to the matching Langfuse chat traces."""
+    if os.environ.get("LANGFUSE_ENABLED", "false").strip().lower() != "true":
+        return 0
+    host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+    if not (host and public_key and secret_key):
+        raise RuntimeError("Langfuse score upload enabled but host/public/secret key is incomplete")
+
+    score_names = (
+        "context_precision", "context_recall", "faithfulness", "answer_relevancy",
+        "citation_present", "citation_indices_valid",
+    )
+    scores = []
+    for record in records:
+        for name in score_names:
+            value = record[name]
+            scores.append({
+                "traceId": record["trace_id"],
+                "name": f"ragas_{name}" if name in score_names[:4] else name,
+                "value": float(value),
+                "dataType": "BOOLEAN" if isinstance(value, bool) else "NUMERIC",
+                "comment": f"Ragas offline run {run_id}; case {record['id']}",
+            })
+    auth = base64.b64encode(f"{public_key}:{secret_key}".encode("utf-8")).decode("ascii")
+    request = Request(
+        f"{host}/api/public/scores",
+        data=json.dumps(scores, ensure_ascii=False).encode("utf-8"),
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            if response.status >= 300:
+                raise RuntimeError(f"Langfuse score API returned HTTP {response.status}")
+    except HTTPError as exc:
+        raise RuntimeError(f"Langfuse score API returned HTTP {exc.code}") from None
+    except (URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Langfuse score upload failed ({type(exc).__name__})") from None
+    return len(scores)
 
 
 async def run(args: argparse.Namespace) -> Path:
@@ -184,6 +246,9 @@ async def run(args: argparse.Namespace) -> Path:
         )
         records.append(await score_case(case, output, metrics))
 
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    langfuse_score_count = upload_langfuse_scores(records, run_id)
+
     metric_names = tuple(metrics)
     means = {
         name: sum(record[name] for record in records) / len(records)
@@ -193,7 +258,7 @@ async def run(args: argparse.Namespace) -> Path:
     means["citation_index_valid_rate"] = sum(record["citation_indices_valid"] for record in records) / len(records)
 
     output_path = args.output or ROOT / "evaluation-results" / (
-        "ragas-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".json"
+        "ragas-" + run_id + ".json"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
@@ -202,6 +267,7 @@ async def run(args: argparse.Namespace) -> Path:
         "evaluator_model": os.environ["RAGAS_EVAL_MODEL"],
         "evaluator_embedding_model": os.environ["RAGAS_EVAL_EMBEDDING_MODEL"],
         "case_count": len(records),
+        "langfuse_scores_uploaded": langfuse_score_count,
         "mean_scores": means,
         "cases": records,
     }

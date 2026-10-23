@@ -5,6 +5,8 @@ export { deleteDocument, expireDocument, getDocumentSource, getDocumentStatus, l
 export { downloadStoredFile, listFiles, uploadStoredFile } from './files.js';
 export { addMemberToKnowledgeBase, classifyKnowledgeUpload, createKnowledgeBase, createMember, deleteKnowledgeBase, listKnowledgeBaseMembers,
   removeMemberFromKnowledgeBase,
+  deleteMember, updateMember,
   updateKnowledgeBase,
-  listKnowledgeBases, listMemberAccounts, updateMemberRoles } from './knowledgeBases.js';
+  listKnowledgeBases, listMemberAccounts, updateMemberDepartment, updateMemberRoles } from './knowledgeBases.js';
 export { createRole, listRolePermissions, listRoles, updateRole } from './roles.js';
+export { createDepartment, deleteDepartment, listDepartments, updateDepartment } from './departments.js';

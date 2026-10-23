@@ -11,7 +11,7 @@ from app.api.schemas import KnowledgeBaseMemoryInput, KnowledgeBaseUpdate
 from server_core.acl import can_view_document, authorized_documents, is_kb_member
 from server_core.config import settings
 from server_core.models import (
-    Chunk, Document, KnowledgeBase, KnowledgeBaseMember, KnowledgeBaseMemory, Role, User, UserRole,
+    Chunk, Department, Document, KnowledgeBase, KnowledgeBaseMember, KnowledgeBaseMemory, Role, User, UserRole,
 )
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
@@ -186,7 +186,8 @@ def list_members(kb_id: str, db: Session = Depends(get_db), actor: User = Depend
     for user, _membership in rows:
         role_rows = db.scalars(select(Role).join(UserRole, UserRole.role_id == Role.id)
                                .where(UserRole.user_id == user.id)).all()
-        members.append({"id": user.id, "username": user.username, "department_id": user.department_id,
+        members.append({"id": user.id, "nickname": user.nickname or user.username,
+                        "username": user.username, "department_id": user.department_id,
                         "clearance": user.clearance, "roles": [role.name for role in role_rows],
                         "role_ids": [role.id for role in role_rows]})
     return members
@@ -213,6 +214,14 @@ def list_documents(kb_id: str, db: Session = Depends(get_db), user: User = Depen
     if not is_kb_member(db, user, kb_id):
         raise HTTPException(404, "Knowledge base not found")
     rows = db.scalars(select(Document).where(Document.knowledge_base_id == kb_id)).all()
+    department_ids = {doc.department_id for doc in rows if doc.department_id}
+    departments = {item.id: item.name for item in db.scalars(
+        select(Department).where(Department.id.in_(department_ids))
+    ).all()} if department_ids else {}
     return [{"id": doc.id, "filename": doc.filename, "status": doc.status,
+             "access_scope": doc.access_scope, "department_id": doc.department_id,
+             "department_name": departments.get(doc.department_id),
+             "classification_level": doc.classification_level,
+             "allowed_roles": doc.allowed_roles or [],
              "error": doc.error_message if user.is_admin else None}
             for doc in rows if user.is_admin or can_view_document(db, user, doc)]

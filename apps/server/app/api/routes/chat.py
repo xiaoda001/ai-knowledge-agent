@@ -1,10 +1,13 @@
 import json
 import logging
 from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from opentelemetry import baggage
 from pydantic import ValidationError
+from opentelemetry import context as otel_context, trace
 from opentelemetry.trace import Status, StatusCode
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -15,7 +18,7 @@ from app.agents.knowledge_qa.intent import (
     ChatIntent, ChatRoutePlan, classify_fast_intent, plan_chat_request, rewrite_followup_question,
 )
 from app.agents.providers.llm import llm_for_request
-from app.agents.providers.redaction import redact
+from app.agents.providers.redaction import redact, redact_for_observability
 from app.api.dependencies import get_db, permission_user
 from app.api.schemas import ChatMessage as ChatMessageInput, ChatRequest
 from app.services.chat_system_queries import (
@@ -26,6 +29,7 @@ from app.services.chat_context import prepare_context
 from app.services.chat_attachments import extract_chat_attachment
 from app.services.chat_usage import ChatUsageTracker
 from app.services.workspace_memory import load_workspace_memory
+from server_core.config import settings
 from server_core.models import ChatConversation, ChatMessage, Document, User
 from server_core.observability import tracer
 
@@ -87,7 +91,7 @@ def _tracked_llm(usage_tracker: ChatUsageTracker | None):
 
 
 def _clarification_message() -> str:
-    return "我还不确定你想做什么。你是想闲聊、查询知识库内容，还是查询知识库和文档数量？请再说明一下。"
+    return "我的能力还在升级中，目前可以陪你聊聊天，也可以帮你查询知识库里的内容。你想聊点什么，或想查什么内容？"
 
 
 def _workspace_memory_message(db: Session, user: User, knowledge_base_ids: list[str]):
@@ -136,7 +140,8 @@ def _available_chat_knowledge_bases(db: Session, user: User, requested_ids: list
 
 def _composite_chat_events(plan, request: ChatRequest, db: Session, user: User, llm,
                            safe_history: list[tuple[str, str]], safe_summary: str,
-                           knowledge_bases, all_authorized, id_by_ref, scope_error=None):
+                           knowledge_bases, all_authorized, id_by_ref, scope_error=None,
+                           trace_context=None):
     """Execute a bounded route plan and stream every result in the original order."""
     knowledge_tasks = [(index, task) for index, task in enumerate(plan.tasks)
                        if task.intent == "knowledge_qa"]
@@ -172,7 +177,8 @@ def _composite_chat_events(plan, request: ChatRequest, db: Session, user: User, 
                 except Exception:
                     logger.exception("Composite follow-up rewrite failed; using planned question")
             try:
-                result = retrieve_with_graph(db, user, routed_ids, question)
+                trace_kwargs = {"trace_context": trace_context} if trace_context is not None else {}
+                result = retrieve_with_graph(db, user, routed_ids, question, **trace_kwargs)
                 task_chunks[index] = result["chunks"]
                 task_failed_ids[index] = set(result["failed_knowledge_base_ids"])
                 failed_ids.update(task_failed_ids[index])
@@ -270,7 +276,7 @@ def _composite_chat_events(plan, request: ChatRequest, db: Session, user: User, 
 
 
 def _chat_events(request: ChatRequest, db: Session, user: User, attachment: dict | None = None,
-                 usage_tracker: ChatUsageTracker | None = None):
+                 usage_tracker: ChatUsageTracker | None = None, trace_context=None):
     if attachment:
         yield _status("正在整理附件上下文…")
         try:
@@ -349,6 +355,7 @@ def _chat_events(request: ChatRequest, db: Session, user: User, attachment: dict
             yield from _composite_chat_events(
                 route_plan, request, db, user, llm, safe_history, safe_summary,
                 knowledge_bases, all_authorized_bases, id_by_ref, scope_error,
+                trace_context=trace_context,
             )
         except Exception as exc:
             logger.exception("Composite chat execution failed")
@@ -405,7 +412,8 @@ def _chat_events(request: ChatRequest, db: Session, user: User, attachment: dict
                 logger.exception("Follow-up question rewrite failed; using original question")
                 # Keep the original user query if rewriting is unavailable; never widen ACL scope.
                 retrieval_question = route_question
-        result = retrieve_with_graph(db, user, retrieval_scope_ids, retrieval_question)
+        trace_kwargs = {"trace_context": trace_context} if trace_context is not None else {}
+        result = retrieve_with_graph(db, user, retrieval_scope_ids, retrieval_question, **trace_kwargs)
         chunks = result["chunks"]
         failed_ids = result["failed_knowledge_base_ids"]
     except Exception as exc:
@@ -465,6 +473,9 @@ def _chat_events(request: ChatRequest, db: Session, user: User, attachment: dict
 @router.post("/chat")
 async def chat(http_request: Request, db: Session = Depends(get_db),
                user: User = Depends(permission_user("chat.use"))):
+    # Preserve an incoming W3C traceparent (for example from the Ragas runner)
+    # across the deferred StreamingResponse generator.
+    request_parent_context = otel_context.get_current()
     attachment = None
     uploaded_file = None
     if http_request.headers.get("content-type", "").startswith("multipart/form-data"):
@@ -514,12 +525,22 @@ async def chat(http_request: Request, db: Session = Depends(get_db),
         conversation.updated_at = datetime.utcnow()
         db.commit()
 
-    def events():
+    # A persisted chat conversation groups multiple request traces into one
+    # Langfuse session. One-off chats get their own session identifier.
+    session_id = conversation.id if conversation is not None else f"chat-{uuid4()}"
+    request_trace_context = baggage.set_baggage(
+        "langfuse.session.id", session_id, context=request_parent_context,
+    )
+
+    def stream_events(root_span, trace_context):
         answer = []
+        trace_answer = []
         sources = []
         failed = False
-        usage_tracker = ChatUsageTracker()
+        usage_tracker = ChatUsageTracker(parent_context=trace_context)
         usage_payload = None
+        span_context = root_span.get_span_context()
+        trace_id = format(span_context.trace_id, "032x") if span_context.is_valid else None
         if conversation is not None:
             yield _status("正在整理会话上下文…")
             previous = db.query(ChatMessage).filter_by(
@@ -537,9 +558,17 @@ async def chat(http_request: Request, db: Session = Depends(get_db),
                                for item in context.recent_messages]
             if context.summary_updated:
                 db.commit()
-        for event in _chat_events(request, db, user, attachment, usage_tracker):
+        for event in _chat_events(request, db, user, attachment, usage_tracker,
+                                  trace_context=trace_context):
+            if event.startswith("event: token\n"):
+                try:
+                    token_payload = json.loads(event.split("\ndata: ", 1)[1].strip())
+                    trace_answer.append(token_payload.get("content", ""))
+                except (ValueError, json.JSONDecodeError):
+                    pass
             if event.startswith("event: done\n"):
                 usage_payload = usage_tracker.snapshot()
+                usage_payload.update({"trace_id": trace_id, "session_id": session_id})
                 yield _event("usage", usage_payload)
             if conversation is not None and event.startswith("event: "):
                 try:
@@ -563,11 +592,69 @@ async def chat(http_request: Request, db: Session = Depends(get_db),
                 except (ValueError, json.JSONDecodeError):
                     pass
             yield event
+        usage_payload = usage_payload or usage_tracker.snapshot()
+        usage_payload.update({"trace_id": trace_id, "session_id": session_id})
+        root_span.set_attribute("llm.usage.input_tokens", usage_payload["input_tokens"])
+        root_span.set_attribute("llm.usage.output_tokens", usage_payload["output_tokens"])
+        root_span.set_attribute("llm.usage.estimated", usage_payload["tokens_estimated"])
+        if usage_payload.get("cost_usd") is not None:
+            root_span.set_attribute("llm.usage.cost_usd", usage_payload["cost_usd"])
+        root_output = {
+            "source_count": len(sources),
+            "input_tokens": usage_payload["input_tokens"],
+            "output_tokens": usage_payload["output_tokens"],
+            "tokens_estimated": usage_payload["tokens_estimated"],
+        }
+        if settings.langfuse_capture_content:
+            root_output["answer"] = redact_for_observability("".join(trace_answer))
+            root_output["sources"] = [
+                {**source, "text": redact_for_observability(source.get("text", ""))}
+                for source in sources
+            ]
+        root_span.set_attribute("langfuse.observation.output", json.dumps(root_output, ensure_ascii=False))
+        if failed:
+            root_span.set_status(Status(StatusCode.ERROR))
 
+    def events():
+        root_span = _tracer.start_span("chat.request", context=request_trace_context)
+        root_span.set_attribute("langfuse.observation.type", "agent")
+        root_span.set_attribute("langfuse.trace.name", "knowledge-chat")
+        root_span.set_attribute("langfuse.session.id", session_id)
+        trace_context = (trace.set_span_in_context(root_span, request_trace_context)
+                         if root_span.get_span_context().is_valid else None)
+        if settings.langfuse_capture_content:
+            root_span.set_attribute("langfuse.observation.input", json.dumps({
+                "question": redact_for_observability(request.question),
+            }, ensure_ascii=False))
+        try:
+            stream = iter(stream_events(root_span, trace_context))
+            while True:
+                # StreamingResponse advances sync generators in a thread pool.
+                # Attach/detach for each next() call so logs inherit the trace
+                # context without keeping a ContextVar token across yields.
+                token = otel_context.attach(trace_context or request_trace_context)
+                try:
+                    event = next(stream)
+                except StopIteration:
+                    break
+                finally:
+                    otel_context.detach(token)
+                yield event
+        finally:
+            root_span.end()
+
+    request_span_context = trace.get_current_span(request_trace_context).get_span_context()
+    response_headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "X-Session-ID": session_id,
+    }
+    if request_span_context.is_valid:
+        response_headers["X-Trace-ID"] = format(request_span_context.trace_id, "032x")
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+        headers=response_headers,
     )
 
 

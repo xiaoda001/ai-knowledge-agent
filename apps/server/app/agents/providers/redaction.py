@@ -18,3 +18,20 @@ def redact(text: str) -> str:
         return text
     except Exception as exc:
         raise RuntimeError("Redaction policy failed; outbound request denied") from exc
+
+
+def redact_for_observability(text: str) -> str:
+    """Apply configured redaction rules to trace content regardless of LLM locality."""
+    if not settings.redaction_rules.strip():
+        return text
+    try:
+        rules = json.loads(settings.redaction_rules)
+        if not isinstance(rules, list) or not rules:
+            raise ValueError("empty policy")
+        for rule in rules:
+            text = re.sub(rule["pattern"], rule.get("replacement", "[REDACTED]"), text)
+        return text
+    except Exception:
+        # Telemetry must never break a chat request or leak content when the
+        # configured redaction policy is malformed.
+        return "[content omitted: redaction failed]"

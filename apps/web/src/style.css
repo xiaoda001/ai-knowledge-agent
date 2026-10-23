@@ -58,11 +58,9 @@ h3 { color: var(--ink); }
 .workspace-toolbar { display: flex; flex: 0 0 auto; align-items: end; justify-content: space-between; gap: 20px; min-height: 64px; }
 .page-heading h2 { margin: 0 0 5px; font-size: 23px; letter-spacing: -.035em; }
 .page-heading p { margin: 0; color: #8490a4; font-size: 13px; line-height: 1.5; }
-.workspace-kb-select { display: grid; flex: 0 1 280px; gap: 6px; color: #8793a7; font-size: 11px; font-weight: 650; }
-.workspace-kb-select select { padding: 10px 12px; }
 .workspace-notice { margin: 0; padding: 11px 14px; border: 1px solid #f1dcae; border-radius: 10px; background: #fffaf0; color: #87641e; }
-.panel-stack { display: grid; gap: 15px; }
-.card { padding: 22px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 3px 14px #243e6410; }
+.panel-stack { display: grid; min-width: 0; gap: 15px; }
+.card { min-width: 0; padding: 22px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 3px 14px #243e6410; }
 .card-heading { display: flex; align-items: start; justify-content: space-between; margin-bottom: 17px; }
 .card-heading h3, .empty-state h3 { margin: 0; color: #2b3a53; font-size: 16px; }
 .card-heading p { margin: 5px 0 0; }
@@ -92,6 +90,28 @@ h3 { color: var(--ink); }
 .role-tag { padding: 5px 9px; border-radius: 999px; background: #eff5ff; color: #4d76bb; font-size: 10px; }
 .role-permission-preview { margin: 4px 0; color: #718099; font-size: 12px; line-height: 1.6; }
 .system-role-badge { align-self: start; padding: 7px 10px; border-radius: 20px; background: #f2f4f7; color: #718096; font-size: 11px; white-space: nowrap; }
+.data-table-wrap { width: 100%; max-width: 100%; min-width: 0; margin-top: 14px; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--line); border-radius: 11px; }
+.data-table { width: 100%; border-collapse: collapse; color: #46556c; text-align: left; font-size: 12px; }
+.data-table th, .data-table td { padding: 12px 13px; border-bottom: 1px solid #edf0f5; vertical-align: top; }
+.data-table thead th { background: #f8faff; color: #66758c; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.data-table tbody tr:last-child > * { border-bottom: 0; }
+.data-table tbody th { color: #334158; font-weight: 650; }
+.data-table select, .data-table input[type="number"] { min-width: 110px; padding: 8px 9px; }
+.role-table { min-width: 560px; table-layout: fixed; }
+.role-table th:nth-child(1) { width: 17%; }
+.role-table th:nth-child(2) { width: 24%; }
+.role-table th:nth-child(3) { width: 43%; }
+.role-table th:nth-child(4) { width: 16%; }
+.member-table { min-width: 900px; }
+.member-directory-table { min-width: 520px; table-layout: fixed; }
+.member-directory-table th:nth-child(1), .member-directory-table th:nth-child(2) { width: 35%; }
+.member-directory-table th:nth-child(3) { width: 30%; }
+.table-subtext { display: block; margin-top: 5px; color: #8c98aa; font-size: 11px; font-weight: 400; }
+.table-role-options { display: flex; flex-wrap: wrap; gap: 7px 12px; min-width: 180px; }
+.table-role-option { display: inline-flex; align-items: center; gap: 6px; color: #46556c; font-size: 11px; font-weight: 550; cursor: pointer; }
+.table-role-option input { flex: 0 0 15px; width: 15px; height: 15px; margin: 0; accent-color: var(--blue); }
+.table-actions { display: flex; flex-wrap: wrap; gap: 7px; min-width: 135px; }
+.table-actions button { min-height: 36px; padding: 7px 9px; white-space: nowrap; }
 .account-directory-heading { align-items: start; gap: 18px; }
 .account-search { flex: 0 1 250px; }
 .partial-results-notice { margin: 0 0 14px; padding: 11px 13px; border: 1px solid #eed9a9; border-radius: 9px; background: #fffaf0; color: #765d27; font-size: 12px; line-height: 1.5; }
@@ -313,7 +333,6 @@ button:hover:not(:disabled) { background: var(--blue-strong); box-shadow: 0 4px 
   .shell.authenticated .workspace-main { min-height: 0; flex: 1 1 0; }
   .workspace-toolbar { align-items: stretch; flex-direction: column; gap: 12px; min-height: 0; }
   .page-heading h2 { font-size: 20px; }
-  .workspace-kb-select { flex-basis: auto; width: 100%; }
   .chat-workspace { min-height: 0; margin: 0 -16px -16px; }
   .conversation-toolbar { width: calc(100% - 32px); min-height: 54px; }
   .history-button, .start-conversation-button { min-height: 42px; gap: 7px; padding: 8px 10px; font-size: 11px; }

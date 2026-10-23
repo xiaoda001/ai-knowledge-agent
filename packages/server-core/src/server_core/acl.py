@@ -13,6 +13,7 @@ PERMISSIONS = {
     "document.upload": "上传和管理知识文档",
     "file.upload": "上传常规文件",
     "role.manage": "创建和配置角色",
+    "department.manage": "管理部门目录",
 }
 
 

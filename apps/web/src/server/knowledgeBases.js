@@ -39,6 +39,19 @@ export function createMember(user, token) {
   });
 }
 
+export function updateMember(userId, user, token) {
+  return request(`/admin/users/${userId}`, {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+  });
+}
+
+export function deleteMember(userId, token) {
+  return request(`/admin/users/${userId}`, { token, method: 'DELETE' });
+}
+
 export function addMemberToKnowledgeBase(knowledgeBaseId, userId, token) {
   return request(`/knowledge-bases/${knowledgeBaseId}/members/${userId}`, { token, method: 'POST' });
 }
@@ -54,4 +67,10 @@ export function listKnowledgeBaseMembers(knowledgeBaseId, token) {
 export function updateMemberRoles(userId, roleIds, token) {
   return request(`/admin/users/${userId}/roles`, { token, method: 'PUT',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role_ids: roleIds }) });
+}
+
+export function updateMemberDepartment(userId, departmentId, clearance, token) {
+  return request(`/admin/users/${userId}/department`, { token, method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ department_id: departmentId, clearance: Number(clearance) }) });
 }

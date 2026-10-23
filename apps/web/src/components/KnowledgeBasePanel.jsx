@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { addMemberToKnowledgeBase, createKnowledgeBase, deleteKnowledgeBase,
   deleteDocument, expireDocument, getDocumentSource, getDocumentStatus, listKnowledgeBaseMembers, listMemberAccounts,
-  removeMemberFromKnowledgeBase, updateKnowledgeBase, uploadMarkdown } from '../server/index.js';
+  listDepartments, removeMemberFromKnowledgeBase, updateKnowledgeBase, uploadMarkdown } from '../server/index.js';
 import { listDocuments } from '../server/documents.js';
 import Modal from './Modal.jsx';
 
@@ -25,8 +25,16 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
   const [preview, setPreview] = useState(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [uploadTarget, setUploadTarget] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [uploadScope, setUploadScope] = useState('knowledge_base');
+  const [uploadDepartmentId, setUploadDepartmentId] = useState(user.department_id || '');
+  const [uploadClassificationLevel, setUploadClassificationLevel] = useState('0');
+  const [uploadAllowedRoles, setUploadAllowedRoles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  useEffect(() => { listDepartments(token).then(setDepartments).catch(error => onNotice(error.message)); }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -134,13 +142,30 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
     finally { setPreviewBusy(false); }
   }
 
-  async function uploadSelectedFile(file) {
+  function uploadSelectedFile(file) {
+    if (!file) return;
+    setPendingUpload(file);
+    setUploadScope('knowledge_base');
+    setUploadDepartmentId(user.department_id || '');
+    setUploadClassificationLevel('0');
+    setUploadAllowedRoles([]);
+  }
+
+  async function submitSelectedUpload(event) {
+    event.preventDefault();
     const base = uploadTarget;
+    const file = pendingUpload;
     if (!base || !file) return;
     setUploading(true);
     try {
-      const created = await uploadMarkdown(base.id, file, null, token);
+      const acl = uploadScope === 'document_acl' ? {
+        departmentId: uploadDepartmentId,
+        classificationLevel: Number(uploadClassificationLevel),
+        allowedRoles: uploadAllowedRoles,
+      } : null;
+      const created = await uploadMarkdown(base.id, file, acl, token);
       await refreshDocumentList(base);
+      setPendingUpload(null);
       setUploading(false);
       onNotice(`已上传，正在索引：${file.name}`);
       for (let attempt = 0; attempt < 60; attempt++) {
@@ -219,12 +244,14 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
     </Modal>
 
     <Modal open={documentsOpen} title={`${uploadTarget?.name || ''} · 资料`} onClose={() => { if (!uploading) setDocumentsOpen(false); }} className="wide-modal">
-      <div className="section-title document-modal-toolbar"><p className="muted">知识库成员均可访问；过期资料保留记录但不参与 AI 检索。</p>
+      <div className="section-title document-modal-toolbar"><p className="muted">资料按所选访问范围授权；过期资料保留记录但不参与 AI 检索。</p>
         {canUpload && <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? '上传中…' : '添加资料'}</button>}</div>
       <input ref={fileInputRef} className="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv"
         onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) uploadSelectedFile(file); }} />
       {documentsBusy ? <p className="muted">正在加载文档…</p> : documentItems.length ? <div className="document-list">{documentItems.map(document => <div className="document-row" key={document.id}>
-        <button type="button" className="document-preview-button" disabled={!['ready', 'expired'].includes(document.status)} onClick={() => openPreview(document)}>{document.filename}<small>{['ready', 'expired'].includes(document.status) ? document.id : '索引完成后可预览'}</small></button>
+        <button type="button" className="document-preview-button" disabled={!['ready', 'expired'].includes(document.status)} onClick={() => openPreview(document)}>{document.filename}<small>{document.access_scope === 'document_acl'
+          ? `${document.department_name || '部门'} · 密级 ${document.classification_level}${document.allowed_roles?.length ? ` · ${document.allowed_roles.join('、')}` : ''}`
+          : '知识库成员可访问'}{['ready', 'expired'].includes(document.status) ? ` · ${document.id}` : ' · 索引完成后可预览'}</small></button>
         <span className={`tag ${document.status}`}>{({ queued: '排队中', processing: '处理中', ready: '可用', failed: '失败', expired: '已过期' })[document.status] || document.status}</span>
         {document.error && <small className="error">{document.error}</small>}
         {canUpload && <div className="document-row-actions">
@@ -237,6 +264,34 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
     <Modal open={Boolean(preview)} title={preview?.filename || '文档预览'} onClose={() => setPreview(null)} className="wide-modal document-preview-modal">
       {previewBusy && <p className="muted">正在加载文档内容…</p>}
       {preview && <pre className="document-preview-content">{preview.markdown}</pre>}
+    </Modal>
+
+    <Modal open={Boolean(pendingUpload)} title="设置资料访问范围" onClose={() => { if (!uploading) setPendingUpload(null); }} className="wide-modal">
+      {pendingUpload && <form onSubmit={submitSelectedUpload}>
+        <p className="muted modal-description">文件：{pendingUpload.name}。知识库范围对本库成员开放；文档范围会额外按部门、密级和可选角色过滤。</p>
+        <label>访问范围<select value={uploadScope} onChange={event => setUploadScope(event.target.value)}>
+          <option value="knowledge_base">知识库成员</option>
+          <option value="document_acl" disabled={!user.department_id || user.clearance == null}>限制到部门 / 密级 / 角色</option>
+        </select></label>
+        {uploadScope === 'document_acl' && <>
+          <label>部门<select value={uploadDepartmentId} onChange={event => setUploadDepartmentId(event.target.value)} required>
+            <option value="">选择部门</option>{departments.filter(item => item.id === user.department_id).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select></label>
+          <label>文档密级<input type="number" min="0" max={user.clearance ?? 0} value={uploadClassificationLevel}
+            onChange={event => setUploadClassificationLevel(event.target.value)} required /></label>
+          <fieldset className="permission-fieldset"><legend>允许角色（可不选）</legend>
+            {user.roles?.length ? <div className="permission-grid">{user.roles.map(role => <label className="permission-option" key={role}>
+              <input type="checkbox" checked={uploadAllowedRoles.includes(role)} onChange={() => setUploadAllowedRoles(current => current.includes(role)
+                ? current.filter(item => item !== role) : [...current, role])} /><span>{role}</span>
+            </label>)}</div> : <p className="muted">当前账号没有角色；可留空表示不额外按角色限制。</p>}
+          </fieldset>
+          <p className="muted">当前账号只能为自己所属部门创建部门级资料；用户的密级上限不能低于文档密级。</p>
+        </>}
+        <div className="form-actions modal-actions"><button disabled={uploading || (uploadScope === 'document_acl' && !uploadDepartmentId)}>
+          {uploading ? '正在上传…' : '上传并索引'}</button>
+          <button type="button" className="secondary" disabled={uploading} onClick={() => setPendingUpload(null)}>取消</button>
+        </div>
+      </form>}
     </Modal>
 
   </div>;

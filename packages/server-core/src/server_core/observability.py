@@ -1,5 +1,6 @@
 """Opt-in OpenTelemetry setup shared by the API and Celery worker."""
 
+import base64
 import logging
 import os
 
@@ -28,8 +29,8 @@ def configure_observability(*, app=None, engine=None, celery_app=None) -> bool:
     """Configure OTLP tracing/metrics when OTEL_ENABLED is true.
 
     The application remains available if telemetry dependencies or the collector
-    are unavailable. Instrumentation deliberately does not capture request bodies,
-    headers, prompts, retrieved text, or user identifiers.
+    are unavailable. Instrumentation does not capture prompts or retrieved text
+    unless the explicit LANGFUSE_CAPTURE_CONTENT opt-in is enabled.
     """
     if os.getenv("OTEL_ENABLED", "false").strip().lower() != "true":
         return False
@@ -70,6 +71,11 @@ def _configure_runtime(*, app=None, engine=None, celery_app=None) -> bool:
         tracer_provider.add_span_processor(BatchSpanProcessor(
             OTLPSpanExporter(endpoint=endpoint, insecure=endpoint.startswith("http://")),
         ))
+        if os.getenv("LANGFUSE_ENABLED", "false").strip().lower() == "true":
+            try:
+                _add_langfuse_exporter(tracer_provider)
+            except Exception as exc:
+                logger.warning("Langfuse trace export unavailable (%s)", type(exc).__name__)
         trace.set_tracer_provider(tracer_provider)
         metric_reader = PeriodicExportingMetricReader(
             OTLPMetricExporter(endpoint=endpoint, insecure=endpoint.startswith("http://")),
@@ -123,6 +129,60 @@ def _configure_log_export(resource, endpoint: str) -> None:
         root_logger.addHandler(LoggingHandler(level=logging.INFO, logger_provider=provider))
     if root_logger.level == logging.NOTSET or root_logger.level > logging.INFO:
         root_logger.setLevel(logging.INFO)
+
+
+def _add_langfuse_exporter(tracer_provider) -> None:
+    """Fan out traces to Langfuse without changing the existing OTel backend."""
+    from opentelemetry import baggage
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace import SpanProcessor
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip().rstrip("/")
+    if not public_key or not secret_key:
+        raise RuntimeError("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are required")
+    if not host.startswith(("http://", "https://")):
+        raise RuntimeError("LANGFUSE_HOST must be an HTTP(S) URL")
+
+    credentials = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode("ascii")
+    exporter = OTLPSpanExporter(
+        endpoint=f"{host}/api/public/otel/v1/traces",
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "x-langfuse-ingestion-version": "4",
+        },
+    )
+    class AgentTraceProcessor(SpanProcessor):
+        """Send only chat/agent spans to Langfuse; keep infrastructure traces local."""
+
+        def __init__(self):
+            self.processor = BatchSpanProcessor(exporter)
+
+        @staticmethod
+        def _is_agent_span(span):
+            return span.name == "chat.request" or span.name == "llm.generation" or span.name.startswith("knowledge.")
+
+        def on_start(self, span, parent_context=None):
+            if self._is_agent_span(span):
+                session_id = baggage.get_baggage(
+                    "langfuse.session.id", context=parent_context,
+                )
+                if session_id:
+                    span.set_attribute("langfuse.session.id", session_id)
+                self.processor.on_start(span, parent_context)
+
+        def on_end(self, span):
+            if self._is_agent_span(span):
+                self.processor.on_end(span)
+
+        def shutdown(self):
+            return self.processor.shutdown()
+
+        def force_flush(self, timeout_millis=30000):
+            return self.processor.force_flush(timeout_millis)
+
+    tracer_provider.add_span_processor(AgentTraceProcessor())
 
 
 def tracer(name: str):

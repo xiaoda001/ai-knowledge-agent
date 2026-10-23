@@ -84,14 +84,19 @@ export default function RolesPanel({ token, roles, onRolesChange, onNotice }) {
 
     <section className="card">
       <div className="section-title"><div><h3>角色列表</h3><p className="muted">成员可同时拥有多个角色，权限按并集生效。</p></div></div>
-      {roles.length ? <div className="role-list">{roles.map(role => <article className="role-row" key={role.id}>
-        <div className="role-copy"><strong>{role.name}</strong><p>{role.description || '未填写说明'}</p>
-          <div className="role-tags">{(role.permissions || []).length ? role.permissions.map(permission => <span className="role-tag" key={permission}>{permissionOptions.find(item => item.key === permission)?.label || permission}</span>) : <span className="muted">未授予功能权限</span>}</div>
-        </div>
-        {role.is_system
-          ? <span className="system-role-badge">系统角色 · 不可编辑</span>
-          : <button type="button" className="secondary" onClick={() => editRole(role)}>配置</button>}
-      </article>)}</div> : <p className="muted empty-list">还没有角色。创建角色后，可在成员表单中分配。</p>}
+      {roles.length ? <div className="data-table-wrap">
+        <table className="data-table role-table">
+          <thead><tr><th scope="col">角色</th><th scope="col">说明</th><th scope="col">功能权限</th><th scope="col">操作</th></tr></thead>
+          <tbody>{roles.map(role => <tr key={role.id}>
+            <th scope="row"><strong>{role.name}</strong>{role.is_system && <small className="table-subtext">系统角色 · 不可编辑</small>}</th>
+            <td>{role.description || <span className="muted">未填写说明</span>}</td>
+            <td><div className="role-tags">{(role.permissions || []).length ? role.permissions.map(permission => <span className="role-tag" key={permission}>{permissionOptions.find(item => item.key === permission)?.label || permission}</span>) : <span className="muted">未授予功能权限</span>}</div></td>
+            <td>{role.is_system
+              ? <span className="system-role-badge">不可编辑</span>
+              : <button type="button" className="secondary" onClick={() => editRole(role)}>配置</button>}</td>
+          </tr>)}</tbody>
+        </table>
+      </div> : <p className="muted empty-list">还没有角色。创建角色后，可在成员表单中分配。</p>}
     </section>
   </div>;
 }

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from server_core.acl import is_kb_member, user_role_names
 from server_core.config import settings
-from server_core.models import Document, User
+from server_core.models import Department, Document, User
 from worker_app.tasks import ingest_document
 
 
@@ -29,6 +29,8 @@ async def upload_knowledge_document(db: Session, user: User, kb_id: str, file: U
         department_id = (department_id or "").strip()
         if not department_id or classification_level is None or classification_level < 0:
             raise HTTPException(422, "Document department and non-negative classification are required")
+        if db.get(Department, department_id) is None:
+            raise HTTPException(422, "Select a department from the department directory")
         roles = [role.strip() for role in allowed_roles.split(",") if role.strip()]
         if (department_id != user.department_id or user.clearance is None or classification_level > user.clearance
                 or (roles and not set(roles).intersection(user_role_names(db, user)))):
