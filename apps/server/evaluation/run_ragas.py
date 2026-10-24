@@ -191,7 +191,7 @@ def upload_langfuse_scores(records: list[dict], run_id: str) -> int:
     """Attach offline Ragas scores to the matching Langfuse chat traces."""
     if os.environ.get("LANGFUSE_ENABLED", "false").strip().lower() != "true":
         return 0
-    host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
+    host = os.environ.get("LANGFUSE_HOST", "").rstrip("/")
     public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
     if not (host and public_key and secret_key):

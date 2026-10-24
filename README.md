@@ -49,20 +49,22 @@ OTel 日志通过 Collector 发往 Loki，保留 72 小时；trace ID/span ID �
 
 ## Langfuse（可选）
 
-Langfuse 可作为 Agent trace 的额外接收端；现有 Tempo、Prometheus 和 Loki 保持可用。Langfuse 使用 OTLP/HTTP，应用同时保留发往本地 Collector/Tempo 的 OTLP/gRPC 导出。
+本项目提供独立的本地 Langfuse Compose 编排，位于 `deploy/langfuse/`；它不会修改现有 Grafana、Tempo、Prometheus 或 Loki 配置。先按 [本地部署说明](deploy/langfuse/README.md) 在 1Panel 单独启动 Langfuse，然后在本项目 `.env` 中配置其地址和项目 API 密钥。Langfuse 使用 OTLP/HTTP 接收 Agent traces；启用现有 `observability` profile 后，项目仍会向本地 Collector/Tempo 和 Loki 输出数据。
 
-在 `.env` 中配置 Langfuse 项目密钥：
+在本项目 `.env` 中配置：
 
 ```dotenv
 OTEL_ENABLED=true
 LANGFUSE_ENABLED=true
-LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_HOST=http://<服务器内网IP>:3001
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_CAPTURE_CONTENT=false
 ```
 
-Langfuse Cloud 用户按项目所在区域填写 `LANGFUSE_HOST`；自托管时填写自己的 Langfuse 地址。然后启动观测 profile：
+`LANGFUSE_HOST` 填 API 容器可以访问的 Langfuse 本地地址。修改 `.env` 后重建 API/Worker 容器。没有填写本地地址时，应用不会回退到 Langfuse Cloud。
+
+需要 Grafana/Loki/Tempo 时，照常启动现有观测 profile：
 
 ```powershell
 docker compose --profile observability up -d --build

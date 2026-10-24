@@ -139,9 +139,11 @@ def _add_langfuse_exporter(tracer_provider) -> None:
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
     secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip().rstrip("/")
+    host = os.getenv("LANGFUSE_HOST", "").strip().rstrip("/")
     if not public_key or not secret_key:
         raise RuntimeError("LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are required")
+    if not host:
+        raise RuntimeError("LANGFUSE_HOST must point to a self-hosted Langfuse instance")
     if not host.startswith(("http://", "https://")):
         raise RuntimeError("LANGFUSE_HOST must be an HTTP(S) URL")
 
