@@ -16,6 +16,15 @@ export function expireDocument(documentId, token) {
   return request(`/documents/${encodeURIComponent(documentId)}/expire`, { token, method: 'POST' });
 }
 
+export function updateDocumentDates(documentId, dates, token) {
+  return request(`/documents/${encodeURIComponent(documentId)}/dates`, {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dates),
+  });
+}
+
 export function deleteDocument(documentId, token) {
   return request(`/documents/${encodeURIComponent(documentId)}`, { token, method: 'DELETE' });
 }

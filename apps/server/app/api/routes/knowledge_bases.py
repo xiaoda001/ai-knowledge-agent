@@ -10,6 +10,7 @@ from app.api.dependencies import current_user, get_db, permission_user
 from app.api.schemas import KnowledgeBaseMemoryInput, KnowledgeBaseUpdate
 from server_core.acl import can_view_document, authorized_documents, is_kb_member
 from server_core.config import settings
+from server_core.document_versions import document_version_states
 from server_core.models import (
     Chunk, Department, Document, KnowledgeBase, KnowledgeBaseMember, KnowledgeBaseMemory, Role, User, UserRole,
 )
@@ -214,11 +215,16 @@ def list_documents(kb_id: str, db: Session = Depends(get_db), user: User = Depen
     if not is_kb_member(db, user, kb_id):
         raise HTTPException(404, "Knowledge base not found")
     rows = db.scalars(select(Document).where(Document.knowledge_base_id == kb_id)).all()
+    version_states = document_version_states(rows)
     department_ids = {doc.department_id for doc in rows if doc.department_id}
     departments = {item.id: item.name for item in db.scalars(
         select(Department).where(Department.id.in_(department_ids))
     ).all()} if department_ids else {}
     return [{"id": doc.id, "filename": doc.filename, "status": doc.status,
+             "version_status": version_states[doc.id],
+             "publication_date": doc.publication_date.isoformat() if doc.publication_date else None,
+             "effective_date": doc.effective_date.isoformat() if doc.effective_date else None,
+             "created_at": doc.created_at.isoformat() if doc.created_at else None,
              "access_scope": doc.access_scope, "department_id": doc.department_id,
              "department_name": departments.get(doc.department_id),
              "classification_level": doc.classification_level,

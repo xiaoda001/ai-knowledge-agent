@@ -2,6 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createConversation, deleteConversation, getConversation, listConversations, streamChat } from '../server/index.js';
 import ChatComposer from './ChatComposer.jsx';
 
+const sourceVersionLabels = {
+  current: '当前版本', scheduled: '待生效', needs_review: '版本日期待确认',
+  superseded: '旧版本 · 已被新版替代', expired: '旧版本 · 已过期',
+};
+
+function formatResponseDuration(seconds) {
+  if (seconds < 60) return `${seconds.toFixed(1)} 秒`;
+  const roundedSeconds = Math.round(seconds);
+  return `${Math.floor(roundedSeconds / 60)} 分 ${String(roundedSeconds % 60).padStart(2, '0')} 秒`;
+}
+
 export default function ChatPanel({ token, user, onNotice }) {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
@@ -181,9 +192,7 @@ export default function ChatPanel({ token, user, onNotice }) {
       </div>
       {conversationUsage && <div className="conversation-usage-summary" aria-label="本对话已统计用量">
         <span>{conversationUsage.tokensEstimated ? '约 ' : ''}{conversationUsage.totalTokens.toLocaleString()} tokens</span>
-        <span>{conversationUsage.pricingConfigured
-          ? `预估 $${conversationUsage.costUsd.toFixed(8)} USD`
-          : '成本未配置'}</span>
+        {conversationUsage.pricingConfigured && <span>预估 ${conversationUsage.costUsd.toFixed(8)} USD</span>}
       </div>}
       <button type="button" className="start-conversation-button" disabled={loading || creatingConversation} onClick={startNewConversation}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -216,19 +225,19 @@ export default function ChatPanel({ token, user, onNotice }) {
                 : <div className="assistant-bubble typing-indicator" role="status" aria-label={message.status || '正在生成回答'}>
                   {message.status && <span className="typing-indicator-text">{message.status}</span>}<i /><i /><i />
                 </div>}
-              {message.usage && <div className="message-usage" aria-label="本轮模型用量">
-                <span>{message.usage.tokens_estimated ? '约 ' : ''}{message.usage.total_tokens.toLocaleString()} tokens
-                  （输入 {message.usage.input_tokens.toLocaleString()} / 输出 {message.usage.output_tokens.toLocaleString()}）</span>
-                <span>{message.usage.pricing_configured && message.usage.cost_usd != null
-                  ? `预估成本 $${message.usage.cost_usd.toFixed(8)} USD`
-                  : '成本未配置'}</span>
+              {message.usage && <div className="message-usage" aria-label="本轮回复信息">
+                {message.usage && <span>{message.usage.tokens_estimated ? '约 ' : ''}{message.usage.total_tokens.toLocaleString()} tokens
+                  （输入 {message.usage.input_tokens.toLocaleString()} / 输出 {message.usage.output_tokens.toLocaleString()}）</span>}
+                {message.usage?.pricing_configured && message.usage.cost_usd != null &&
+                  <span>预估成本 ${message.usage.cost_usd.toFixed(8)} USD</span>}
+                {message.usage.response_duration_seconds != null && <span>回复用时 {formatResponseDuration(message.usage.response_duration_seconds)}</span>}
               </div>}
               {message.failedKnowledgeBases?.length > 0 && <p className="partial-results-notice" role="status">
                 {message.failedKnowledgeBases.map(base => base.name).join('、')} 暂时无法检索；以下答案和来源仅来自成功检索的知识库。
               </p>}
               {message.sources?.length > 0 && <div className="sources"><h3>参考来源 <span>{message.sources.length}</span></h3>{message.sources.map((source, index) => <details key={source.chunk_id || `${source.type}-${source.filename || index}`}>
                 <summary><span className="source-index">{String(source.source_number || index + 1).padStart(2, '0')}</span><span>{source.type === 'attachment'
-                  ? `${source.filename} · 本轮附件` : `${source.knowledge_base_name} · ${source.filename || source.document_id} · 段落 ${source.ordinal + 1}`}</span></summary>
+                  ? `${source.filename} · 本轮附件` : <>{source.knowledge_base_name} · {source.filename || source.document_id} · {source.effective_date ? `生效 ${source.effective_date}` : '生效日期未识别'} · 段落 {source.ordinal + 1}{source.version_status && source.version_status !== 'current' && <span className={`tag version-${source.version_status}`}>{sourceVersionLabels[source.version_status] || '版本状态待确认'}</span>}</>}</span></summary>
                 {source.text && <p>{source.text}</p>}
               </details>)}</div>}
             </div>

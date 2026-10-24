@@ -35,8 +35,8 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), actor: User 
     department_id = payload.department_id.strip()
     if db.scalar(select(User.id).where(User.username == username)):
         raise HTTPException(409, "Username already exists")
-    if not username or len(payload.password) < 12 or payload.clearance < 0 or not department_id:
-        raise HTTPException(422, "Username, department, non-negative clearance, and 12-character password are required")
+    if not username or len(payload.password) < 6 or payload.clearance < 0 or not department_id:
+        raise HTTPException(422, "Username, department, non-negative clearance, and 6-character password are required")
     if db.get(Department, department_id) is None:
         raise HTTPException(422, "Select a department from the department directory")
     role_ids = set(payload.role_ids)
@@ -67,8 +67,8 @@ def update_user(user_id: str, payload: UserUpdate, db: Session = Depends(get_db)
         raise HTTPException(422, "Nickname, username, and department are required")
     if db.scalar(select(User.id).where(User.username == username, User.id != user.id)):
         raise HTTPException(409, "Username already exists")
-    if payload.password and len(payload.password) < 12:
-        raise HTTPException(422, "Password must be at least 12 characters")
+    if payload.password and len(payload.password) < 6:
+        raise HTTPException(422, "Password must be at least 6 characters")
     if db.get(Department, payload.department_id) is None:
         raise HTTPException(422, "Select a department from the department directory")
     role_ids = set(payload.role_ids)

@@ -1,7 +1,7 @@
 export { getCurrentUser, login } from './auth.js';
 export { streamChat } from './chat.js';
 export { createConversation, deleteConversation, getConversation, listConversations } from './conversations.js';
-export { deleteDocument, expireDocument, getDocumentSource, getDocumentStatus, listDocuments, uploadKnowledgeDocument, uploadMarkdown } from './documents.js';
+export { deleteDocument, expireDocument, getDocumentSource, getDocumentStatus, listDocuments, updateDocumentDates, uploadKnowledgeDocument, uploadMarkdown } from './documents.js';
 export { downloadStoredFile, listFiles, uploadStoredFile } from './files.js';
 export { addMemberToKnowledgeBase, classifyKnowledgeUpload, createKnowledgeBase, createMember, deleteKnowledgeBase, listKnowledgeBaseMembers,
   removeMemberFromKnowledgeBase,

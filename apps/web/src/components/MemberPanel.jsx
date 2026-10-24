@@ -62,8 +62,8 @@ export default function MemberPanel({ token, user, roles, onNotice }) {
   async function submitMember(event) {
     event.preventDefault();
     if (!newUser.nickname.trim() || !newUser.username.trim() || !newUser.department_id || !newUser.role_id) return;
-    if (!editingMember && newUser.password.length < 12) return onNotice('密码至少需要 12 位');
-    if (editingMember && newUser.password && newUser.password.length < 12) return onNotice('新密码至少需要 12 位');
+    if (!editingMember && newUser.password.length < 6) return onNotice('密码至少需要 6 位');
+    if (editingMember && newUser.password && newUser.password.length < 6) return onNotice('新密码至少需要 6 位');
     setSaving(true);
     try {
       const payload = {
@@ -126,8 +126,8 @@ export default function MemberPanel({ token, user, roles, onNotice }) {
           </div>
           <div className="row">
             <label>密码<input type="password" value={newUser.password} onChange={event => setNewUser({ ...newUser, password: event.target.value })}
-              minLength="12" autoComplete="new-password" required={!editingMember}
-              placeholder={editingMember ? '留空则不修改密码' : '至少 12 位'} /></label>
+              minLength="6" autoComplete="new-password" required={!editingMember}
+              placeholder={editingMember ? '留空则不修改密码' : '至少 6 位'} /></label>
             <label>密级上限<input type="number" min="0" value={newUser.clearance} onChange={event => setNewUser({ ...newUser, clearance: event.target.value })} required /></label>
           </div>
           <div className="row">
@@ -144,7 +144,7 @@ export default function MemberPanel({ token, user, roles, onNotice }) {
           <div className="form-actions">
             <button disabled={saving || !roles.length || !departments.length}>{saving ? '保存中…' : editingMember ? '保存修改' : '创建成员'}</button>
             <button type="button" className="secondary" disabled={saving} onClick={closeModal}>取消</button>
-            <span className="muted">密码至少 12 位；编辑时留空表示不修改密码。</span>
+            <span className="muted">密码至少 6 位；编辑时留空表示不修改密码。</span>
           </div>
         </form>
       </Modal>

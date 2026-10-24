@@ -6,6 +6,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, permission_user
+from app.api.schemas import DocumentDatesUpdate
 from app.services.document_ingestion import upload_knowledge_document
 from app.services.knowledge_classifier import classify_knowledge_upload
 from server_core.acl import can_view_document, is_kb_member
@@ -47,6 +48,34 @@ def expire_document(doc_id: str, db: Session = Depends(get_db), user: User = Dep
     doc.status = "expired"
     db.commit()
     return {"id": doc.id, "status": doc.status}
+
+
+@router.put("/documents/{doc_id}/dates")
+def update_document_dates(doc_id: str, body: DocumentDatesUpdate, db: Session = Depends(get_db),
+                          user: User = Depends(permission_user("document.upload"))):
+    doc = _manageable_document(db, user, doc_id)
+    doc.publication_date = body.publication_date
+    doc.effective_date = body.effective_date
+    try:
+        collection = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port).get_or_create_collection("knowledge_chunks")
+        vectors = collection.get(where={"document_id": doc.id}, include=["metadatas"])
+        if vectors["ids"]:
+            metadatas = [metadata or {} for metadata in vectors.get("metadatas", [])]
+            for metadata in metadatas:
+                metadata.pop("publication_date", None)
+                metadata.pop("effective_date", None)
+                if body.publication_date:
+                    metadata["publication_date"] = body.publication_date.isoformat()
+                if body.effective_date:
+                    metadata["effective_date"] = body.effective_date.isoformat()
+            collection.update(ids=vectors["ids"], metadatas=metadatas)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(503, "Document version metadata could not be updated; retry later") from exc
+    db.commit()
+    return {"id": doc.id,
+            "publication_date": doc.publication_date.isoformat() if doc.publication_date else None,
+            "effective_date": doc.effective_date.isoformat() if doc.effective_date else None}
 
 
 @router.delete("/documents/{doc_id}")

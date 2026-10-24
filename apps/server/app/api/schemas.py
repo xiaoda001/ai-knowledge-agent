@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -71,6 +72,11 @@ class KnowledgeBaseUpdate(BaseModel):
 class KnowledgeBaseMemoryInput(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     content: str = Field(min_length=1, max_length=2000)
+
+
+class DocumentDatesUpdate(BaseModel):
+    publication_date: date | None = None
+    effective_date: date | None = None
 
 
 class RoleCreate(BaseModel):

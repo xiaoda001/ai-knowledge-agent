@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from server_core.db import Base
@@ -87,6 +87,8 @@ class Document(Base):
     department_id: Mapped[str | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
     classification_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
     allowed_roles: Mapped[list[str]] = mapped_column(JSON, default=list)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

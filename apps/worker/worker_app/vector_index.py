@@ -13,6 +13,10 @@ def replace_document_vectors(document, chunks) -> None:
         "knowledge_base_id": document.knowledge_base_id,
         "access_scope": document.access_scope,
     }
+    if document.publication_date is not None:
+        metadata["publication_date"] = document.publication_date.isoformat()
+    if document.effective_date is not None:
+        metadata["effective_date"] = document.effective_date.isoformat()
     if document.department_id is not None:
         metadata["department_id"] = document.department_id
     if document.classification_level is not None:

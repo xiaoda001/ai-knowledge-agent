@@ -4,6 +4,7 @@ from server_core.db import SessionLocal
 from server_core.models import Chunk, Document
 from worker_app.celery_app import celery_app
 from worker_app.extract import extract_document_text
+from worker_app.document_dates import extract_document_dates
 from worker_app.markdown import split_markdown
 from worker_app.vector_index import replace_document_vectors
 from server_core.observability import tracer
@@ -28,6 +29,7 @@ def _ingest_document(self, doc_id: str, span):
         doc.error_message = None
         db.commit()
         text = extract_document_text(doc.storage_path)
+        doc.publication_date, doc.effective_date = extract_document_dates(text)
         chunks = split_markdown(text)
         span.set_attribute("ingest.chunk_count", len(chunks))
         if not chunks:

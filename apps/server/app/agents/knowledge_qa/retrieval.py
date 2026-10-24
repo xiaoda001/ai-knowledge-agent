@@ -9,9 +9,10 @@ from sqlalchemy import select
 
 from server_core.acl import authorized_documents
 from server_core.config import settings
+from server_core.document_versions import document_version_states
 from server_core.embeddings import embed_texts
 from server_core.model_api import post_model_json
-from server_core.models import Chunk
+from server_core.models import Chunk, Document
 
 
 _tracer = trace.get_tracer(__name__)
@@ -28,6 +29,27 @@ def reranker():
     if not settings.reranker_api_key:
         raise RuntimeError("RERANKER_API_KEY is required")
     return RemoteReranker()
+
+
+def rerank_document_text(chunk, document, version_status: str | None = None) -> str:
+    """Give the reranker concise provenance and version context with each chunk."""
+    if document is None:
+        return chunk.text
+    status_labels = {
+        "current": "当前版本",
+        "scheduled": "待生效版本",
+        "needs_review": "版本日期待确认",
+        "superseded": "已被新版替代",
+        "expired": "已过期",
+    }
+    metadata = [f"文件名：{document.filename or '未知'}"]
+    if document.publication_date:
+        metadata.append(f"发布日期：{document.publication_date.isoformat()}")
+    if document.effective_date:
+        metadata.append(f"生效日期：{document.effective_date.isoformat()}")
+    if version_status:
+        metadata.append(f"版本状态：{status_labels.get(version_status, version_status)}")
+    return f"{'；'.join(metadata)}\n正文片段：{chunk.text}"
 
 
 class RemoteReranker:
@@ -94,9 +116,10 @@ class RemoteReranker:
         return scores
 
 
-def retrieve(db, user, kb_id: str, question: str, limit: int = 8) -> list[Chunk]:
+def retrieve(db, user, kb_id: str, question: str, limit: int = 8,
+             include_history: bool = False) -> list[Chunk]:
     # Resolve ACLs from SQL before either candidate generation path runs.
-    documents = authorized_documents(db, user, kb_id)
+    documents = authorized_documents(db, user, kb_id, include_history=include_history)
     document_ids = [document.id for document in documents]
     if not document_ids:
         return []
@@ -128,5 +151,12 @@ def retrieve(db, user, kb_id: str, question: str, limit: int = 8) -> list[Chunk]
     if not candidates:
         return []
 
-    scores = reranker().predict([(question, row.text) for row in candidates])
+    version_documents = db.scalars(select(Document).where(Document.knowledge_base_id == kb_id)).all()
+    version_states = document_version_states(version_documents)
+    document_by_id = {document.id: document for document in version_documents}
+    scores = reranker().predict([
+        (question, rerank_document_text(row, document_by_id.get(row.document_id),
+                                        version_states.get(row.document_id)))
+        for row in candidates
+    ])
     return [row for _, row in sorted(zip(scores, candidates), key=lambda item: item[0], reverse=True)[:limit]]

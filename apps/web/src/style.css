@@ -156,6 +156,9 @@ button:hover:not(:disabled) { background: var(--blue-strong); box-shadow: 0 4px 
 .document-row small { display: block; margin-top: 4px; color: #98a2b2; font-size: 10px; overflow-wrap: anywhere; }
 .document-row-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 7px; }
 .document-row-actions button { min-height: 30px; padding: 6px 9px; font-size: 10px; }
+.version-dates-form { margin-top: 18px; padding: 16px; border: 1px solid #dce5f3; border-radius: 12px; background: #f8faff; }
+.version-dates-form h3 { margin: 0 0 6px; }
+.version-dates-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .knowledge-table-card { min-width: 0; }
 .knowledge-list-heading { margin-bottom: 18px; }
 .knowledge-table-wrap { width: 100%; overflow-x: auto; }
@@ -195,6 +198,11 @@ button:hover:not(:disabled) { background: var(--blue-strong); box-shadow: 0 4px 
 .tag { align-self: start; padding: 4px 8px; border-radius: 999px; background: #f0f3f7; color: #6f7d91; font-size: 10px; }
 .tag.ready { background: #e9f8f0; color: #27815a; }
 .tag.expired { background: #f0f3f7; color: #7b8798; }
+.tag.version-current { background: #e8f7ef; color: #197348; }
+.tag.version-scheduled { background: #fff5dc; color: #8a5a00; }
+.tag.version-needs_review { background: #fff0e5; color: #9a4b08; }
+.tag.version-superseded { background: #f0f3f7; color: #68778d; }
+.tag.version-expired { background: #f0f3f7; color: #68778d; }
 .tag.failed, .error { background: #fff0ef; color: #a84740; }
 .error { grid-column: 1 / -1; }
 

@@ -2,8 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { addMemberToKnowledgeBase, createKnowledgeBase, deleteKnowledgeBase,
   deleteDocument, expireDocument, getDocumentSource, getDocumentStatus, listKnowledgeBaseMembers, listMemberAccounts,
   listDepartments, removeMemberFromKnowledgeBase, updateKnowledgeBase, uploadMarkdown } from '../server/index.js';
-import { listDocuments } from '../server/documents.js';
+import { listDocuments, updateDocumentDates } from '../server/documents.js';
 import Modal from './Modal.jsx';
+
+const VERSION_STATUS_LABELS = {
+  current: '当前版本', scheduled: '待生效', needs_review: '待确认日期',
+  superseded: '已被新版替代', expired: '已过期',
+};
+
+function documentVersionDates(document) {
+  const dates = [];
+  if (document.publication_date) dates.push(`发布日期 ${document.publication_date}`);
+  if (document.effective_date) dates.push(`生效日期 ${document.effective_date}`);
+  return dates.length ? dates.join(' · ') : '未识别到发布日期或生效日期';
+}
 
 export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowledgeBaseId, onKnowledgeBases,
   onKnowledgeBaseId, onRefreshDocuments, onNotice }) {
@@ -24,6 +36,7 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
   const [documentsBusy, setDocumentsBusy] = useState(false);
   const [preview, setPreview] = useState(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [versionDatesTarget, setVersionDatesTarget] = useState(null);
   const [uploadTarget, setUploadTarget] = useState(null);
   const [pendingUpload, setPendingUpload] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -142,6 +155,20 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
     finally { setPreviewBusy(false); }
   }
 
+  async function submitVersionDates(event) {
+    event.preventDefault();
+    if (!versionDatesTarget) return;
+    try {
+      await updateDocumentDates(versionDatesTarget.id, {
+        publication_date: versionDatesTarget.publication_date || null,
+        effective_date: versionDatesTarget.effective_date || null,
+      }, token);
+      await refreshDocumentList();
+      setVersionDatesTarget(null);
+      onNotice('版本日期已更新');
+    } catch (error) { onNotice(error.message); }
+  }
+
   function uploadSelectedFile(file) {
     if (!file) return;
     setPendingUpload(file);
@@ -244,21 +271,35 @@ export default function KnowledgeBasePanel({ token, user, knowledgeBases, knowle
     </Modal>
 
     <Modal open={documentsOpen} title={`${uploadTarget?.name || ''} · 资料`} onClose={() => { if (!uploading) setDocumentsOpen(false); }} className="wide-modal">
-      <div className="section-title document-modal-toolbar"><p className="muted">资料按所选访问范围授权；过期资料保留记录但不参与 AI 检索。</p>
+      <div className="section-title document-modal-toolbar"><p className="muted">同一知识库内同名资料按版本管理，依据生效日期切换；日期缺失或冲突时标记待确认，不会自动替换当前版。</p>
         {canUpload && <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? '上传中…' : '添加资料'}</button>}</div>
       <input ref={fileInputRef} className="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv"
         onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) uploadSelectedFile(file); }} />
       {documentsBusy ? <p className="muted">正在加载文档…</p> : documentItems.length ? <div className="document-list">{documentItems.map(document => <div className="document-row" key={document.id}>
         <button type="button" className="document-preview-button" disabled={!['ready', 'expired'].includes(document.status)} onClick={() => openPreview(document)}>{document.filename}<small>{document.access_scope === 'document_acl'
           ? `${document.department_name || '部门'} · 密级 ${document.classification_level}${document.allowed_roles?.length ? ` · ${document.allowed_roles.join('、')}` : ''}`
-          : '知识库成员可访问'}{['ready', 'expired'].includes(document.status) ? ` · ${document.id}` : ' · 索引完成后可预览'}</small></button>
+          : '知识库成员可访问'} · {documentVersionDates(document)}{['ready', 'expired'].includes(document.status) ? ` · ${document.id}` : ' · 索引完成后可预览'}</small></button>
         <span className={`tag ${document.status}`}>{({ queued: '排队中', processing: '处理中', ready: '可用', failed: '失败', expired: '已过期' })[document.status] || document.status}</span>
+        {VERSION_STATUS_LABELS[document.version_status] && <span className={`tag version-${document.version_status}`}>{VERSION_STATUS_LABELS[document.version_status]}</span>}
         {document.error && <small className="error">{document.error}</small>}
         {canUpload && <div className="document-row-actions">
+          <button type="button" className="secondary" disabled={['queued', 'processing'].includes(document.status)} onClick={() => setVersionDatesTarget({
+            id: document.id, filename: document.filename,
+            publication_date: document.publication_date || '', effective_date: document.effective_date || '',
+          })}>编辑版本日期</button>
           {document.status !== 'expired' && <button type="button" className="secondary" disabled={['queued', 'processing'].includes(document.status)} onClick={() => changeDocumentState(document, 'expire')}>过期</button>}
           <button type="button" className="danger-button" disabled={['queued', 'processing'].includes(document.status)} onClick={() => changeDocumentState(document, 'delete')}>删除</button>
         </div>}
       </div>)}</div> : <p className="muted empty-list">暂无资料</p>}
+      {versionDatesTarget && <form className="version-dates-form" onSubmit={submitVersionDates}>
+        <h3>编辑版本日期 · {versionDatesTarget.filename}</h3>
+        <p className="muted">日期会优先从正文自动识别；这里可人工校正。生效日期为空时，以发布日期判断版本顺序。</p>
+        <div className="version-dates-fields">
+          <label>发布日期<input type="date" value={versionDatesTarget.publication_date} onChange={event => setVersionDatesTarget(current => ({ ...current, publication_date: event.target.value }))} /></label>
+          <label>生效日期<input type="date" value={versionDatesTarget.effective_date} onChange={event => setVersionDatesTarget(current => ({ ...current, effective_date: event.target.value }))} /></label>
+        </div>
+        <div className="form-actions modal-actions"><button>保存日期</button><button type="button" className="secondary" onClick={() => setVersionDatesTarget(null)}>取消</button></div>
+      </form>}
     </Modal>
 
     <Modal open={Boolean(preview)} title={preview?.filename || '文档预览'} onClose={() => setPreview(null)} className="wide-modal document-preview-modal">

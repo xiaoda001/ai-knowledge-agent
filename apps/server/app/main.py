@@ -54,6 +54,11 @@ def startup():
     if "access_scope" not in document_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE documents ADD COLUMN access_scope VARCHAR(32) NOT NULL DEFAULT 'document_acl'"))
+    with engine.begin() as connection:
+        if "publication_date" not in document_columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN publication_date DATE NULL"))
+        if "effective_date" not in document_columns:
+            connection.execute(text("ALTER TABLE documents ADD COLUMN effective_date DATE NULL"))
     if "description" not in {column["name"] for column in inspect(engine).get_columns("knowledge_bases")}:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE knowledge_bases ADD COLUMN description VARCHAR(1000) NOT NULL DEFAULT ''"))

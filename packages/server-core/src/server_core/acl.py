@@ -1,6 +1,9 @@
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from server_core.document_versions import current_document_ids
 from server_core.models import Document, KnowledgeBaseMember, Role, User, UserRole
 
 
@@ -45,16 +48,26 @@ def is_kb_member(db: Session, user: User, kb_id: str) -> bool:
     )) is not None
 
 
-def authorized_documents(db: Session, user: User, kb_id: str) -> list[Document]:
+def authorized_documents(db: Session, user: User, kb_id: str, include_history: bool = False) -> list[Document]:
     """Resolve ACLs before retrieval. Missing user/document attributes fail closed."""
     if not user.active:
         return []
     if not is_kb_member(db, user, kb_id):
         return []
+    statuses = {"ready", "expired"} if include_history else {"ready"}
     candidates = db.scalars(select(Document).where(
         Document.knowledge_base_id == kb_id,
-        Document.status == "ready",
+        Document.status.in_(statuses),
     )).all()
+    if include_history:
+        today = date.today()
+        candidates = [doc for doc in candidates
+                      if doc.status == "expired"
+                      or not (doc.effective_date or doc.publication_date)
+                      or (doc.effective_date or doc.publication_date) <= today]
+    else:
+        current_ids = current_document_ids(candidates)
+        candidates = [doc for doc in candidates if doc.id in current_ids]
     roles = user_role_names(db, user)
     allowed = []
     for doc in candidates:

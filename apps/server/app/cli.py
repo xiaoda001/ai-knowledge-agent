@@ -27,8 +27,8 @@ def main():
         roles = [item.strip() for item in input("Admin roles (comma separated): ").split(",") if item.strip()]
         password = getpass.getpass("Initial admin password: ")
         confirm = getpass.getpass("Confirm password: ")
-        if not username or not department_name or clearance < 0 or len(password) < 12 or password != confirm:
-            raise SystemExit("Username/department are required; clearance must be non-negative; passwords must match and be at least 12 characters.")
+        if not username or not department_name or clearance < 0 or len(password) < 6 or password != confirm:
+            raise SystemExit("Username/department are required; clearance must be non-negative; passwords must match and be at least 6 characters.")
         department = db.query(Department).filter(Department.name == department_name).first()
         if department is None:
             department = Department(id=str(uuid4()), name=department_name)
