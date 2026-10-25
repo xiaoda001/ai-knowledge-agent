@@ -49,7 +49,7 @@ OTel 日志通过 Collector 发往 Loki，保留 72 小时；trace ID/span ID �
 
 ## Langfuse（可选）
 
-本项目提供独立的本地 Langfuse Compose 编排，位于 `deploy/langfuse/`；它不会修改现有 Grafana、Tempo、Prometheus 或 Loki 配置。先按 [本地部署说明](deploy/langfuse/README.md) 在 1Panel 单独启动 Langfuse，然后在本项目 `.env` 中配置其地址和项目 API 密钥。Langfuse 使用 OTLP/HTTP 接收 Agent traces；启用现有 `observability` profile 后，项目仍会向本地 Collector/Tempo 和 Loki 输出数据。
+本项目支持将 Agent traces 发送到你自行部署的 Langfuse 实例；仓库不包含 Langfuse 的 Docker 部署配置。部署 Langfuse 后，在本项目 `.env` 中配置其地址和项目 API 密钥。Langfuse 使用 OTLP/HTTP 接收 Agent traces；启用现有 `observability` profile 后，项目仍会向本地 Collector/Tempo 和 Loki 输出数据。
 
 在本项目 `.env` 中配置：
 
