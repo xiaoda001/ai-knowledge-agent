@@ -28,7 +28,12 @@ services:
       - chroma_data:/data
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     env_file: .env
     environment:
       MYSQL_HOST: mysql
@@ -48,7 +53,12 @@ services:
     ports: ["8022:8000"]
 
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-120}
+        PIP_RETRIES: ${PIP_RETRIES:-5}
     command: ["celery", "-A", "worker_app.celery_app:celery_app", "worker", "--loglevel=INFO"]
     env_file: .env
     environment:

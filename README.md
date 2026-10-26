@@ -59,6 +59,7 @@ LANGFUSE_ENABLED=true
 LANGFUSE_HOST=http://<服务器内网IP>:3001
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_TRACING_ENVIRONMENT=development
 LANGFUSE_CAPTURE_CONTENT=false
 ```
 
@@ -70,6 +71,6 @@ LANGFUSE_CAPTURE_CONTENT=false
 docker compose --profile observability up -d --build
 ```
 
-每次聊天请求生成一条 trace；同一已保存会话的多条 trace 使用 `conversation_id` 作为 Langfuse `session_id`，可以在 Langfuse Sessions 中回放完整对话。未保存的单轮聊天分配独立 session。API 响应头提供 `X-Trace-ID` 和 `X-Session-ID`，聊天消息的 `usage` 数据也保存这两个 ID，因此可以从消息用量记录定位到对应 trace/session。Token、估算成本、检索/重排与模型操作在 trace spans 中；OTel 日志通过同一 trace context 关联到 Loki/Grafana。`LANGFUSE_CAPTURE_CONTENT=true` 后，还会把问题、模型输入输出和检索片段发送给 Langfuse，也会随现有 OTel trace 一并进入本地 Tempo。若配置了 `REDACTION_RULES`，追踪内容会应用这些规则；未配置时会记录原文。启用前请确认两处的访问范围和数据保留策略符合你的数据要求。未配置有效 Langfuse 凭据时，应用仍可启动并继续把 trace 发往本地观测栈。
+每次聊天请求生成一条 trace；同一已保存会话的多条 trace 使用 `conversation_id` 作为 Langfuse `session_id`，可以在 Langfuse Sessions 中回放完整对话。未保存的单轮聊天分配独立 session。trace 会记录内部用户 ID，便于在 Langfuse 按用户筛选；它不会记录用户名。会话、用户、trace 名称和可选环境会传播到每个 Agent observation，便于 Langfuse v4 按这些字段筛选。API 响应头提供 `X-Trace-ID` 和 `X-Session-ID`，聊天消息的 `usage` 数据也保存这两个 ID，因此可以从消息用量记录定位到对应 trace/session。Token、估算成本、检索/重排与模型操作在 trace spans 中；OTel 日志通过同一 trace context 关联到 Loki/Grafana。`LANGFUSE_CAPTURE_CONTENT=true` 后，还会把问题、模型输入输出和检索片段发送给 Langfuse，也会随现有 OTel trace 一并进入本地 Tempo。若配置了 `REDACTION_RULES`，追踪内容会应用这些规则；未配置时会记录原文。启用前请确认两处的访问范围和数据保留策略符合你的数据要求。未配置有效 Langfuse 凭据时，应用仍可启动并继续把 trace 发往本地观测栈。
 
 Embedding 与 reranker 的远程请求会在 Langfuse 记录模型名、请求数和服务商返回的 token/billed units；请求会把 W3C `traceparent` 传给支持该协议的服务商，方便到服务商侧按同一 Trace ID 查调用。按服务商的可计费输入 Token 单价设置 `EMBEDDING_PRICE_PER_1M_TOKENS`、`RERANKER_PRICE_PER_1M_TOKENS`（美元/百万 Token）后，Langfuse 对应 observation 还会显示成本；未填费率时只显示用量，不伪造成本。提供商账单/用量页仍是最终结算依据。`bge` 等免费模型可留空费率。

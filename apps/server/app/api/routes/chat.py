@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -580,6 +581,17 @@ async def chat(http_request: Request, db: Session = Depends(get_db),
     request_trace_context = baggage.set_baggage(
         "langfuse.session.id", session_id, context=request_parent_context,
     )
+    request_trace_context = baggage.set_baggage(
+        "langfuse.user.id", str(user.id), context=request_trace_context,
+    )
+    request_trace_context = baggage.set_baggage(
+        "langfuse.trace.name", "knowledge-chat", context=request_trace_context,
+    )
+    trace_environment = os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "").strip()
+    if trace_environment:
+        request_trace_context = baggage.set_baggage(
+            "langfuse.environment", trace_environment, context=request_trace_context,
+        )
 
     def stream_events(root_span, trace_context):
         answer = []

@@ -252,7 +252,8 @@ button:hover:not(:disabled) { background: var(--blue-strong); box-shadow: 0 4px 
 .attachment-remove { display: grid; width: 27px; min-height: 27px; flex: 0 0 27px; place-items: center; padding: 0; border-radius: 50%; background: #242a33; color: #fff; font-size: 18px; line-height: 1; }
 .attachment-remove:hover:not(:disabled) { background: #444c58; box-shadow: none; }
 .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 7px; }
-.composer-tools { display: flex; min-width: 0; align-items: center; gap: 11px; flex-wrap: wrap; }
+/* Temporarily hide the attachment entry point and its helper copy. */
+.composer-tools { display: none; }
 .composer-add-group { position: relative; flex: 0 0 auto; }
 .composer-add-button { display: grid; width: 38px; min-height: 38px; place-items: center; padding: 5px; border-radius: 50%; background: transparent; color: #202a39; }
 .composer-add-button:hover:not(:disabled) { background: #f1f4f8; color: #202a39; box-shadow: none; }

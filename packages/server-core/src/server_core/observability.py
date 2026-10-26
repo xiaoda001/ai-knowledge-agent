@@ -167,11 +167,17 @@ def _add_langfuse_exporter(tracer_provider) -> None:
 
         def on_start(self, span, parent_context=None):
             if self._is_agent_span(span):
-                session_id = baggage.get_baggage(
-                    "langfuse.session.id", context=parent_context,
-                )
-                if session_id:
-                    span.set_attribute("langfuse.session.id", session_id)
+                # Langfuse v4 filters observations directly, so trace-level
+                # fields must be copied from baggage onto every exported span.
+                for key in (
+                    "langfuse.session.id",
+                    "langfuse.user.id",
+                    "langfuse.trace.name",
+                    "langfuse.environment",
+                ):
+                    value = baggage.get_baggage(key, context=parent_context)
+                    if value:
+                        span.set_attribute(key, value)
                 self.processor.on_start(span, parent_context)
 
         def on_end(self, span):
